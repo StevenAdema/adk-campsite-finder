@@ -13,6 +13,8 @@ import math
 from folium.plugins import MarkerCluster
 from html_utils import create_map, add_layers_to_map, add_opacity_slider, add_markers_to_map, add_layer_control, add_click_to_copy, add_bounding_box_to_map
 import os
+import geopandas as gpd
+from shapely.geometry import Point
 
 # ─── DATACLASS ──────────────────────────────────────────────────────────────
 @dataclass
@@ -22,23 +24,45 @@ class Coord:
     ndvi:      float
     elevation: float = None
     slope:     float = None
+    d_from_water: float = None
+    d_from_trail: float = None
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 STAC_URL     = "https://planetarycomputer.microsoft.com/api/stac/v1"
 CENTER_LON   = -73.75097
 CENTER_LAT   = 44.13082
-RADIUS_KM    = 5       # half width of square, in km
-SAMPLE_N     = 100000  # approx total points in the square
+RADIUS_KM    = 0.5       # half width of square, in km
+SAMPLE_N     = 100  # approx total points in the square
 ELEV_RAD     = 10      # distance in metres to sample elevation and slope around each Coord
 
 # ─── THRESHOLDS FOR FILTERING ──────────────────────────────────────────
-NDVI_THRESH      = 0.25      # vegetation threshold 0 to 1 where 0 is no vegetation and 1 is dense vegetation
-MIN_ELEV_THRESH  = 800      # min elevation in meters
-MAX_ELEV_THRESH  = 1220     # max elevation in meters
-SLOPE_THRESH     = 8       # slope threshold in degrees
+NDVI_THRESH         = 0.25  # vegetation threshold 0 to 1 where 0 is no vegetation and 1 is dense vegetation
+MIN_ELEV_THRESH     = 800   # min elevation in meters
+MAX_ELEV_THRESH     = 1220  # max elevation in meters
+SLOPE_THRESH        = 8     # slope threshold in degrees
+DISTANCE_FROM_WATER = 5    # distance in metres from water bodies
+DISTANCE_FROM_TRAIL = 45    # distance in metres from trails
 
 # establish connection to Planetary Computer STAC
 catalog = Client.open(STAC_URL)
+
+def load_trail_layer(trail_file: str) -> gpd.GeoDataFrame:
+    """
+    Load a trail layer from a shapefile.
+    
+    Args:
+        trail_file (str): Path to the trail shapefile.
+    
+    Returns:
+        gpd.GeoDataFrame: GeoDataFrame containing the trail data.
+    """
+    try:
+        trail_gdf = gpd.read_file(trail_file)
+        print(f"Loaded trail layer with {len(trail_gdf)} features.")
+        return trail_gdf
+    except Exception as e:
+        print(f"Error loading trail layer: {e}")
+        return gpd.GeoDataFrame()  # Return an empty GeoDataFrame if loading fails
 
 def create_coords_grid(
     center_lon: float, center_lat: float,
@@ -315,20 +339,58 @@ def set_elevation_and_slope(coords: List[Coord], distance = ELEV_RAD) -> None:
             c.slope = math.degrees(math.atan(math.hypot(dz_dx, dz_dy)))
 
 
+def set_distance_from_trail_vector(coords: List[Coord], trail_gdf: gpd.GeoDataFrame) -> None:
+    """
+    Calculate the distance from each Coord to the nearest trail using a vector layer.
+    Updates the Coord.d_from_trail attribute in meters.
+    
+    Args:
+        coords (List[Coord]): List of Coord objects.
+        trail_gdf (gpd.GeoDataFrame): GeoDataFrame containing trail geometries.
+    """
+    if trail_gdf.empty:
+        print("Trail layer is empty. Cannot calculate distances.")
+        for c in coords:
+            c.d_from_trail = float('inf')
+        return
+
+    # Combine all trail geometries into a single MultiLineString
+    trails_union = trail_gdf.geometry.unary_union
+
+    # Initialize geodesic calculator
+    geod = Geod(ellps="WGS84")
+
+    for c in coords:
+        coord_point = Point(c.longitude, c.latitude)
+        # Calculate the distance using shapely's distance method
+        nearest_point = trails_union.interpolate(trails_union.project(coord_point))
+        _, _, distance_meters = geod.inv(c.longitude, c.latitude, nearest_point.x, nearest_point.y)
+        c.d_from_trail = abs(distance_meters)
+
+
 if __name__ == "__main__":
     print("Generating Coord grid...")
     coords = create_coords_grid(CENTER_LON, CENTER_LAT, RADIUS_KM, SAMPLE_N)
     print(f"Generated {len(coords)} Coord objects")
-    
+
+    print("Loading trail layer...")
+    trail_file = os.path.join(os.path.dirname(__file__), "data/gis_osm_roads_free_1.shp")
+    trail_gdf = load_trail_layer(trail_file)
+
+    print("Calculating distance to nearest trail for each Coord...")
+    set_distance_from_trail_vector(coords, trail_gdf)
+
+    # Print all coords and their distance from trail
+    for c in coords:
+        print(f"Coord ({c.latitude}, {c.longitude}) - Distance from trail: {c.d_from_trail:.2f} m")
+
     print("Getting NDVI for each Coord...")
     set_ndvi_from_local_tifs(coords, os.path.join(os.path.dirname(__file__), "data"))
-    
+
     print("Getting elevation and slope for each Coord...")
     set_elevation_and_slope(coords)
 
-    campsites = [c for c in coords if c.ndvi < NDVI_THRESH and c.slope <= SLOPE_THRESH and c.elevation >= MIN_ELEV_THRESH]
-    not_campsites = [c for c in coords if c.ndvi >= NDVI_THRESH or c.slope > SLOPE_THRESH or c.elevation < MIN_ELEV_THRESH]
-
+    campsites = [c for c in coords if c.d_from_trail <= DISTANCE_FROM_TRAIL]
     print(f"Found {len(campsites)} potential campsites")
 
     # Create map
@@ -345,7 +407,6 @@ if __name__ == "__main__":
 
     # Add markers
     add_markers_to_map(m, campsites)
-    # add_markers_to_map(m, not_campsites)
 
     # Add layer control
     add_layer_control(m)
@@ -355,4 +416,4 @@ if __name__ == "__main__":
 
     # Save map
     m.save("ADK_Campsites.html")
-    print("Map saved to ndvi_coords_map.html")
+    print("Map saved to ADK_Campsites.html")
