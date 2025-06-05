@@ -125,9 +125,9 @@ def add_markers_to_map(m: folium.Map, coords: List[Coord], radius=3, color="lime
         folium.Marker(
             location=(c.latitude, c.longitude),
             icon=folium.DivIcon(html=f"""
-            <div style="font-size: 24px; text-align: center; line-height: 1;">🏕️</div>
+            <div style="font-size: 28px; text-align: center; line-height: 1;">🏕️</div>
             """),
-            tooltip=f"{c.latitude:.6f}, {c.longitude:.6f} | ndvi: {c.ndvi:.3f}, slope: {c.slope:.0f}°, elev: {c.elevation:.0f}"
+            tooltip=f"{c.latitude:.6f}, {c.longitude:.6f} | ndvi: {c.ndvi:.3f}, slope: {c.slope:.0f}°, elev: {c.elevation:.0f}, d to trail: {c.d_to_trail}"
         ).add_to(m)
 
 def add_layer_control(m: folium.Map) -> None:

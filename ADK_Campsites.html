@@ -17,7 +17,7 @@
             <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <style>
-                #map_e6b054a992185858d7eefc08c0bbf2ee {
+                #map_cc36620c1991b9b285c3f64f209dde3e {
                     position: relative;
                     width: 100.0%;
                     height: 100.0%;
@@ -137,19 +137,19 @@
     </script>
     
     
-            <div class="folium-map" id="map_e6b054a992185858d7eefc08c0bbf2ee" ></div>
+            <div class="folium-map" id="map_cc36620c1991b9b285c3f64f209dde3e" ></div>
         
 </body>
 <script>
     
     
-            var map_e6b054a992185858d7eefc08c0bbf2ee = L.map(
-                "map_e6b054a992185858d7eefc08c0bbf2ee",
+            var map_cc36620c1991b9b285c3f64f209dde3e = L.map(
+                "map_cc36620c1991b9b285c3f64f209dde3e",
                 {
-                    center: [44.13082, -73.75097],
+                    center: [44.12668, -73.75355],
                     crs: L.CRS.EPSG3857,
                     ...{
-  "zoom": 15,
+  "zoom": 14,
   "zoomControl": true,
   "preferCanvas": false,
 }
@@ -161,7 +161,7 @@
 
         
     
-            var tile_layer_a55c121ef3b199a979d308821001c926 = L.tileLayer(
+            var tile_layer_8419f027e2f5c4c4649ca0a4122fbaa2 = L.tileLayer(
                 "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                 {
   "minZoom": 0,
@@ -178,10 +178,10 @@
             );
         
     
-            tile_layer_a55c121ef3b199a979d308821001c926.addTo(map_e6b054a992185858d7eefc08c0bbf2ee);
+            tile_layer_8419f027e2f5c4c4649ca0a4122fbaa2.addTo(map_cc36620c1991b9b285c3f64f209dde3e);
         
     
-            var tile_layer_8770e79534f4c1aabc37a94ca7e2aea8 = L.tileLayer(
+            var tile_layer_1f72e468ef7a0ae26b96691bc11e2a68 = L.tileLayer(
                 "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
                 {
   "minZoom": 0,
@@ -198,16 +198,16 @@
             );
         
     
-            tile_layer_8770e79534f4c1aabc37a94ca7e2aea8.addTo(map_e6b054a992185858d7eefc08c0bbf2ee);
+            tile_layer_1f72e468ef7a0ae26b96691bc11e2a68.addTo(map_cc36620c1991b9b285c3f64f209dde3e);
         
     
-            var poly_line_6ca45728f4130c7ef70e3ba8bc9433bc = L.polyline(
-                [[44.12632844412504, -73.75722781158629], [44.12632844412504, -73.7447121884137], [44.13531155587496, -73.7447121884137], [44.13531155587496, -73.75722781158629], [44.12632844412504, -73.75722781158629]],
+            var poly_line_6a7d50236ef17a153269786768781060 = L.polyline(
+                [[44.122188444125044, -73.75980737297985], [44.122188444125044, -73.74729262702016], [44.13117155587496, -73.74729262702016], [44.13117155587496, -73.75980737297985], [44.122188444125044, -73.75980737297985]],
                 {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "red", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 2}
-            ).addTo(map_e6b054a992185858d7eefc08c0bbf2ee);
+            ).addTo(map_cc36620c1991b9b285c3f64f209dde3e);
         
     
-            poly_line_6ca45728f4130c7ef70e3ba8bc9433bc.bindTooltip(
+            poly_line_6a7d50236ef17a153269786768781060.bindTooltip(
                 `<div>
                      Bounding Box
                  </div>`,
@@ -217,23 +217,23 @@
             );
         
     
-            var layer_control_1063555d8a245d2a3ea1ef0769fda0dd_layers = {
+            var layer_control_100bafb2ba9cda357e3c6e446527a813_layers = {
                 base_layers : {
-                    "Satellite" : tile_layer_a55c121ef3b199a979d308821001c926,
+                    "Satellite" : tile_layer_8419f027e2f5c4c4649ca0a4122fbaa2,
                 },
                 overlays :  {
-                    "Topographic" : tile_layer_8770e79534f4c1aabc37a94ca7e2aea8,
+                    "Topographic" : tile_layer_1f72e468ef7a0ae26b96691bc11e2a68,
                 },
             };
-            let layer_control_1063555d8a245d2a3ea1ef0769fda0dd = L.control.layers(
-                layer_control_1063555d8a245d2a3ea1ef0769fda0dd_layers.base_layers,
-                layer_control_1063555d8a245d2a3ea1ef0769fda0dd_layers.overlays,
+            let layer_control_100bafb2ba9cda357e3c6e446527a813 = L.control.layers(
+                layer_control_100bafb2ba9cda357e3c6e446527a813_layers.base_layers,
+                layer_control_100bafb2ba9cda357e3c6e446527a813_layers.overlays,
                 {
   "position": "topright",
   "collapsed": true,
   "autoZIndex": true,
 }
-            ).addTo(map_e6b054a992185858d7eefc08c0bbf2ee);
+            ).addTo(map_cc36620c1991b9b285c3f64f209dde3e);
 
         
 </script>

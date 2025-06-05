@@ -15,6 +15,7 @@ from html_utils import create_map, add_layers_to_map, add_opacity_slider, add_ma
 import os
 import geopandas as gpd
 from shapely.geometry import Point
+from rtree import index
 
 # ─── DATACLASS ──────────────────────────────────────────────────────────────
 @dataclass
@@ -24,45 +25,29 @@ class Coord:
     ndvi:      float
     elevation: float = None
     slope:     float = None
-    d_from_water: float = None
-    d_from_trail: float = None
+    near_water: bool = False
+    d_to_trail: float = None
+    near_trail: bool = False
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 STAC_URL     = "https://planetarycomputer.microsoft.com/api/stac/v1"
-CENTER_LON   = -73.75097
-CENTER_LAT   = 44.13082
-RADIUS_KM    = 0.5       # half width of square, in km
-SAMPLE_N     = 100  # approx total points in the square
+CENTER_LON   = -73.75355
+CENTER_LAT   = 44.12668 
+RADIUS_KM    = 1       # half width of square, in km
+SAMPLE_N     = 10000   # reccomend approximately 10,000 samples for a 1km square area
 ELEV_RAD     = 10      # distance in metres to sample elevation and slope around each Coord
 
 # ─── THRESHOLDS FOR FILTERING ──────────────────────────────────────────
-NDVI_THRESH         = 0.25  # vegetation threshold 0 to 1 where 0 is no vegetation and 1 is dense vegetation
-MIN_ELEV_THRESH     = 800   # min elevation in meters
-MAX_ELEV_THRESH     = 1220  # max elevation in meters
-SLOPE_THRESH        = 8     # slope threshold in degrees
-DISTANCE_FROM_WATER = 5    # distance in metres from water bodies
-DISTANCE_FROM_TRAIL = 45    # distance in metres from trails
+NDVI_THRESH      = 0.35      # vegetation threshold 0 to 1 where 0 is no vegetation and 1 is dense vegetation
+MIN_ELEV_THRESH  = 700      # min elevation in meters
+MAX_ELEV_THRESH  = 1220     # max elevation in meters 1220
+SLOPE_THRESH     = 8        # slope threshold in degrees
+WATER_DIST_THRESH = 45     # max distance to water in metres
+MIN_TRAIL_DIST_THRESH = 45     # max distance to water in metres
+MAX_TRAIL_DIST_THRESH = 1500     # max distance to water in metres
 
 # establish connection to Planetary Computer STAC
 catalog = Client.open(STAC_URL)
-
-def load_trail_layer(trail_file: str) -> gpd.GeoDataFrame:
-    """
-    Load a trail layer from a shapefile.
-    
-    Args:
-        trail_file (str): Path to the trail shapefile.
-    
-    Returns:
-        gpd.GeoDataFrame: GeoDataFrame containing the trail data.
-    """
-    try:
-        trail_gdf = gpd.read_file(trail_file)
-        print(f"Loaded trail layer with {len(trail_gdf)} features.")
-        return trail_gdf
-    except Exception as e:
-        print(f"Error loading trail layer: {e}")
-        return gpd.GeoDataFrame()  # Return an empty GeoDataFrame if loading fails
 
 def create_coords_grid(
     center_lon: float, center_lat: float,
@@ -225,8 +210,6 @@ def set_ndvi_from_local_tifs(coords: List[Coord], tif_directory: str) -> None:
             c.ndvi = 1
         return
 
-    print(f"Found {len(tif_files)} TIF files in {tif_directory}")
-
     processed_coords = set()
 
     for tif_file in tif_files:
@@ -339,62 +322,137 @@ def set_elevation_and_slope(coords: List[Coord], distance = ELEV_RAD) -> None:
             c.slope = math.degrees(math.atan(math.hypot(dz_dx, dz_dy)))
 
 
-def set_distance_from_trail_vector(coords: List[Coord], trail_gdf: gpd.GeoDataFrame) -> None:
-    """
-    Calculate the distance from each Coord to the nearest trail using a vector layer.
-    Updates the Coord.d_from_trail attribute in meters.
-    
-    Args:
-        coords (List[Coord]): List of Coord objects.
-        trail_gdf (gpd.GeoDataFrame): GeoDataFrame containing trail geometries.
-    """
-    if trail_gdf.empty:
-        print("Trail layer is empty. Cannot calculate distances.")
+def get_near_water(coords: List[Coord], water_shapefile: str, water_dist_thresh: float) -> None:
+    try:
+        # Load the water features shapefile
+        water_gdf = gpd.read_file(water_shapefile)
+        
+        if water_gdf.empty:
+            print("Water shapefile is empty.")
+            for c in coords:
+                c.near_water = False
+            return
+        
+        # Diagnostic information
+        print(f"Original CRS: {water_gdf.crs}")
+        print(f"Geometry types: {water_gdf.geom_type.value_counts()}")
+        print(f"Number of water features: {len(water_gdf)}")
+        
+        # Use a more appropriate projected CRS (example for continental US)
+        target_crs = "EPSG:5070"  # Adjust based on your region
+        
+        if water_gdf.crs.to_string() != target_crs:
+            print(f"Reprojecting to {target_crs}")
+            water_gdf = water_gdf.to_crs(target_crs)
+        
+        # Transform coordinates to the same CRS
+        transformer = Transformer.from_crs("EPSG:4326", target_crs, always_xy=True)
+        
+        # Unary union for better performance if many features
+        water_union = water_gdf.unary_union
+        
+        near_water_count = 0
         for c in coords:
-            c.d_from_trail = float('inf')
-        return
+            x, y = transformer.transform(c.longitude, c.latitude)
+            coord_point = Point(x, y)
+            
+            # Calculate distance to nearest water feature
+            distance = coord_point.distance(water_union)
+            c.near_water = distance <= water_dist_thresh
+            
+            if c.near_water:
+                near_water_count += 1
+                
+        print(f"Coordinates near water: {near_water_count}/{len(coords)}")
+        
+    except Exception as e:
+        print(f"Error processing water shapefile: {e}")
+        for c in coords:
+            c.near_water = False
 
-    # Combine all trail geometries into a single MultiLineString
-    trails_union = trail_gdf.geometry.unary_union
 
-    # Initialize geodesic calculator
-    geod = Geod(ellps="WGS84")
+def get_near_trail(coords: List[Coord], trail_shapefile: str, min_trail_dist_thresh: float, max_trail_dist_thresh: float) -> None:
+    """
+    Determine if each Coord is near a trail or road within the specified distance range.
+    """
+    try:
+        # Load the trail features shapefile
+        trail_gdf = gpd.read_file(trail_shapefile)
 
-    for c in coords:
-        coord_point = Point(c.longitude, c.latitude)
-        # Calculate the distance using shapely's distance method
-        nearest_point = trails_union.interpolate(trails_union.project(coord_point))
-        _, _, distance_meters = geod.inv(c.longitude, c.latitude, nearest_point.x, nearest_point.y)
-        c.d_from_trail = abs(distance_meters)
+        if trail_gdf.empty:
+            print("Trail shapefile is empty. Cannot calculate distances.")
+            for c in coords:
+                c.near_trail = False
+            return
+
+        # Use a more appropriate projected CRS (example for continental US)
+        target_crs = "EPSG:5070"  # Adjust based on your region
+        
+        if trail_gdf.crs.to_string() != target_crs:
+            print(f"Reprojecting to {target_crs}")
+            trail_gdf = trail_gdf.to_crs(target_crs)
+
+        # Transform coordinates to the same CRS as the trail features
+        transformer = Transformer.from_crs("EPSG:4326", target_crs, always_xy=True)
+
+        # Unary union for better performance if many features
+        trail_union = trail_gdf.unary_union
+
+        # Check each coordinate against nearby trail features
+        for c in coords:
+            # Transform the coordinate to projected CRS
+            x, y = transformer.transform(c.longitude, c.latitude)
+            coord_point = Point(x, y)
+
+            # Calculate distance to nearest water feature
+            distance = coord_point.distance(trail_union)
+            c.d_to_trail = distance
+            if distance >= min_trail_dist_thresh and distance <= max_trail_dist_thresh:
+                c.near_trail = True
+            else:
+                c.near_trail = False
+
+    except Exception as e:
+        print(f"Error processing trail shapefile: {e}")
+        for c in coords:
+            c.near_trail = False
 
 
 if __name__ == "__main__":
     print("Generating Coord grid...")
     coords = create_coords_grid(CENTER_LON, CENTER_LAT, RADIUS_KM, SAMPLE_N)
     print(f"Generated {len(coords)} Coord objects")
-
-    print("Loading trail layer...")
-    trail_file = os.path.join(os.path.dirname(__file__), "data/gis_osm_roads_free_1.shp")
-    trail_gdf = load_trail_layer(trail_file)
-
-    print("Calculating distance to nearest trail for each Coord...")
-    set_distance_from_trail_vector(coords, trail_gdf)
-
-    # Print all coords and their distance from trail
-    for c in coords:
-        print(f"Coord ({c.latitude}, {c.longitude}) - Distance from trail: {c.d_from_trail:.2f} m")
-
+    
     print("Getting NDVI for each Coord...")
     set_ndvi_from_local_tifs(coords, os.path.join(os.path.dirname(__file__), "data"))
-
+    
     print("Getting elevation and slope for each Coord...")
     set_elevation_and_slope(coords)
 
-    campsites = [c for c in coords if c.d_from_trail <= DISTANCE_FROM_TRAIL]
+    print("Checking if each Coord is near water...")
+    water_shapefile = os.path.join(os.path.dirname(__file__), "data/gis_osm_water_a_free_1.shp")
+    get_near_water(coords, water_shapefile, WATER_DIST_THRESH)
+
+    print("Checking if each Coord is near a trail...")
+    trail_shapefile = os.path.join(os.path.dirname(__file__), "data/gis_osm_roads_free_1.shp")
+    get_near_trail(coords, trail_shapefile, MIN_TRAIL_DIST_THRESH, MAX_TRAIL_DIST_THRESH)
+
+    # Save cooords to a CSV file
+    coords_csv_path = os.path.join(os.path.dirname(__file__), "data/coords.csv")
+    with open(coords_csv_path, "w") as f:
+        f.write("lat-lon,ndvi,elevation,slope,near_water,d_to_trail,near_trail\n")
+        for c in coords:
+            f.write(f"{c.latitude} {c.longitude},{c.ndvi},{c.elevation},{c.slope},{c.near_water},{c.d_to_trail},{c.near_trail}\n")
+
+    campsites = [
+        c for c in coords if c.ndvi < NDVI_THRESH and c.slope <= SLOPE_THRESH and 
+        c.elevation >= MIN_ELEV_THRESH and not c.near_water and c.near_trail
+    ]
+        
     print(f"Found {len(campsites)} potential campsites")
 
     # Create map
-    m = create_map(CENTER_LAT, CENTER_LON)
+    m = create_map(CENTER_LAT, CENTER_LON, zoom_start=14)
 
     # Add layers
     add_layers_to_map(m)
