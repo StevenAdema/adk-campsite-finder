@@ -33,18 +33,18 @@ class Coord:
 STAC_URL     = "https://planetarycomputer.microsoft.com/api/stac/v1"
 CENTER_LON   = -73.75355
 CENTER_LAT   = 44.12668 
-RADIUS_KM    = 1       # half width of square, in km
-SAMPLE_N     = 10000   # reccomend approximately 10,000 samples for a 1km square area
+RADIUS_KM    = 3       # half width of square, in km
+SAMPLE_N     = 60000   # reccomend approximately 10,000 samples for a 1km square area
 ELEV_RAD     = 10      # distance in metres to sample elevation and slope around each Coord
 
 # ─── THRESHOLDS FOR FILTERING ──────────────────────────────────────────
-NDVI_THRESH      = 0.35      # vegetation threshold 0 to 1 where 0 is no vegetation and 1 is dense vegetation
+NDVI_THRESH      = 0.2      # vegetation threshold 0 to 1 where 0 is no vegetation and 1 is dense vegetation
 MIN_ELEV_THRESH  = 700      # min elevation in meters
 MAX_ELEV_THRESH  = 1220     # max elevation in meters 1220
-SLOPE_THRESH     = 8        # slope threshold in degrees
+SLOPE_THRESH     = 7        # slope threshold in degrees
 WATER_DIST_THRESH = 45     # max distance to water in metres
 MIN_TRAIL_DIST_THRESH = 45     # max distance to water in metres
-MAX_TRAIL_DIST_THRESH = 1500     # max distance to water in metres
+MAX_TRAIL_DIST_THRESH = 600     # max distance to water in metres
 
 # establish connection to Planetary Computer STAC
 catalog = Client.open(STAC_URL)
